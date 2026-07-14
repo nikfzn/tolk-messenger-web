@@ -137,7 +137,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
 
     socket.on('new_message', (msg: Message) => {
-      const { activeChatId, chats } = get();
+      const { activeChatId } = get();
 
       // Add to messages if active chat
       if (msg.chatId === activeChatId) {

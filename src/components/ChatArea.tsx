@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { useChatStore, Message, Chat } from '../store/chatStore';
+import { useChatStore } from '../store/chatStore';
+import type { Message } from '../store/chatStore';
 import { Send, Phone, Video, MoreVertical, MessageSquare } from 'lucide-react';
 
 function formatTime(timestamp: number): string {

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useChatStore, Chat, User } from '../store/chatStore';
+import React, { useRef } from 'react';
+import { useChatStore } from '../store/chatStore';
+import type { Chat, User } from '../store/chatStore';
 import { Search, LogOut, MessageCircle, X, Plus } from 'lucide-react';
 
 function getInitials(name: string | null | undefined, username?: string): string {
@@ -35,7 +36,7 @@ export const Sidebar: React.FC = () => {
   } = useChatStore();
 
   const searchRef = useRef<HTMLInputElement>(null);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
