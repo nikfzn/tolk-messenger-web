@@ -5,14 +5,14 @@ interface User {
   id: string;
   username: string;
   name: string;
-  status: string;
   avatar: string;
 }
 
 interface Chat {
   id: string;
   name: string;
-  type: string;
+  isGroup: boolean;
+  avatar: string | null;
   lastMessage: string;
 }
 
@@ -26,63 +26,78 @@ interface Message {
 
 interface ChatStore {
   currentUser: User | null;
+  token: string | null;
   socket: Socket | null;
   chats: Chat[];
   activeChatId: string | null;
   messages: Message[];
-  login: (username: string, name?: string) => Promise<void>;
+  auth: (type: 'login' | 'register', username: string, password: string, name?: string) => Promise<void>;
+  logout: () => void;
   setActiveChat: (chatId: string) => void;
   sendMessage: (text: string) => void;
-  initSocket: (userId: string) => void;
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string) => Promise<void>;
+  searchUsers: (query: string) => Promise<User[]>;
+  createChat: (targetUserId: string) => Promise<void>;
 }
 
 const SERVER_URL = 'http://localhost:4000';
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   currentUser: null,
+  token: localStorage.getItem('token'),
   socket: null,
   chats: [],
   activeChatId: null,
   messages: [],
 
-  login: async (username, name) => {
+  auth: async (type, username, password, name) => {
     try {
-      const res = await fetch(`${SERVER_URL}/api/auth/login`, {
+      const res = await fetch(`${SERVER_URL}/api/auth/${type}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, name })
+        body: JSON.stringify({ username, password, name })
       });
-      const user = await res.json();
-      set({ currentUser: user });
-      get().initSocket(user.id);
+      if (!res.ok) throw new Error('Auth failed');
+      const data = await res.json();
+      localStorage.setItem('token', data.token);
+      set({ currentUser: data.user, token: data.token });
+      
+      const socket = io(SERVER_URL);
+      socket.on('receive_message', (msg: Message) => {
+        set((state) => {
+          // Add message if we are in this chat
+          if (state.activeChatId === msg.chatId) {
+            return { messages: [...state.messages, msg] };
+          }
+          return state;
+        });
+      });
+      set({ socket });
       await get().fetchChats();
     } catch (e) {
-      console.error('Login failed', e);
+      console.error(e);
+      throw e;
     }
   },
 
-  initSocket: (userId) => {
-    const socket = io(SERVER_URL);
-    socket.on('connect', () => {
-      socket.emit('join', userId);
-    });
-
-    socket.on('receive_message', (msg: Message) => {
-      set((state) => ({ messages: [...state.messages, msg] }));
-    });
-
-    set({ socket });
+  logout: () => {
+    localStorage.removeItem('token');
+    get().socket?.disconnect();
+    set({ currentUser: null, token: null, chats: [], messages: [], activeChatId: null, socket: null });
   },
 
   fetchChats: async () => {
+    const { token, socket } = get();
+    if (!token) return;
     try {
-      const res = await fetch(`${SERVER_URL}/api/chats`);
+      const res = await fetch(`${SERVER_URL}/api/chats`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const chats = await res.json();
       set({ chats });
-      if (chats.length > 0 && !get().activeChatId) {
-        get().setActiveChat(chats[0].id);
+      if (socket && chats.length > 0) {
+        socket.emit('join_chats', chats.map((c: Chat) => c.id));
       }
     } catch (e) {
       console.error(e);
@@ -90,8 +105,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   fetchMessages: async (chatId) => {
+    const { token } = get();
     try {
-      const res = await fetch(`${SERVER_URL}/api/messages/${chatId}`);
+      const res = await fetch(`${SERVER_URL}/api/messages/${chatId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const messages = await res.json();
       set({ messages });
     } catch (e) {
@@ -113,5 +131,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         text
       });
     }
+  },
+
+  searchUsers: async (query) => {
+    const { token } = get();
+    const res = await fetch(`${SERVER_URL}/api/users/search?q=${query}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return res.json();
+  },
+
+  createChat: async (targetUserId) => {
+    const { token } = get();
+    const res = await fetch(`${SERVER_URL}/api/chats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ targetUserId })
+    });
+    const newChat = await res.json();
+    await get().fetchChats();
+    get().setActiveChat(newChat.id);
   }
 }));
