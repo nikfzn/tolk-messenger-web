@@ -1,18 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useChatStore } from './store/chatStore';
-import { Login } from './components/Login';
+import { Auth } from './components/Auth';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 
 const App: React.FC = () => {
-  const currentUser = useChatStore((state) => state.currentUser);
+  const { currentUser, fetchChats, initSocket } = useChatStore();
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchChats();
+      initSocket();
+    }
+  }, [currentUser, fetchChats, initSocket]);
 
   if (!currentUser) {
-    return <Login />;
+    return <Auth />;
   }
 
   return (
-    <div className="app-container">
+    <div className="app-layout fade-in">
       <Sidebar />
       <ChatArea />
     </div>
